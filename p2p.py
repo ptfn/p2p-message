@@ -16,14 +16,13 @@ def main():
             self.name = None
 
         def read_conn(self):
-            while self.running:
+            while self.running == True:
                 msg = (self.conn.recv(1024)).decode()
                 if not msg: break
                 print(msg)
 
         def kill(self):
             self.running = False
-            self.thread.join()
 
         def run(self):
             self.host = "0.0.0.0"
@@ -35,7 +34,7 @@ def main():
             sock.bind((self.host, self.port))
             sock.listen(1)
             self.conn, self.addr = sock.accept()
-            self.conn.send(("* Connected to {}".format(self.name)).encode())
+            self.conn.send(("! Connected to {}.\n".format(self.name)).encode())
 
             self.thread = threading.Thread(target=self.read_conn, args=())
             self.thread.start()
@@ -44,10 +43,11 @@ def main():
             while True:
                 try:
                     msg = input("")
-                    self.conn.send(("[{}]: ".format(self.name) + msg).encode())
+                    self.conn.send(("* [{}]: ".format(self.name) + msg).encode())
                 except KeyboardInterrupt:
-                    self.conn.send(("* {} left".format(self.name)).encode())
+                    self.conn.send(("\n! {} left.".format(self.name)).encode())
                     self.kill()
+                    sock.close()
                     break
 
 
@@ -63,14 +63,13 @@ def main():
             self.name = None
 
         def read_sock(self):
-            while self.running:
+            while self.running == True:
                 msg = (self.sock.recv(1024)).decode()
                 if not msg: break
                 print(msg)
 
         def kill(self):
             self.running = False
-            self.thread.join()
 
         def run(self):
             self.host = input("Host:")
@@ -91,9 +90,11 @@ def main():
                     msg = input("")
                     self.sock.send(("[{}]: ".format(self.name) + msg).encode())
                 except KeyboardInterrupt:
-                    self.sock.send(("* {} left".format(self.name)).encode())
                     self.kill()
+                    self.sock.send(("\n* {} left".format(self.name)).encode())
+                    self.sock.close()
                     break
+
 
     choice = input("Server/Connect:")
 
