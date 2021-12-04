@@ -24,6 +24,10 @@ def main():
         def kill(self):
             self.running = False
 
+        def now(self):
+            dt = datetime.datetime.now()
+            return dt.strftime("%H:%M:%S")
+
         def run(self):
             self.host = "0.0.0.0"
             self.port = int(sys.argv[1])
@@ -34,7 +38,7 @@ def main():
             sock.bind((self.host, self.port))
             sock.listen(1)
             self.conn, self.addr = sock.accept()
-            self.conn.send(("! Connected to {}.\n".format(self.name)).encode())
+            self.conn.send(("! Connected to {}\n".format(self.name)).encode())
 
             self.thread = threading.Thread(target=self.read_conn, args=())
             self.thread.start()
@@ -43,9 +47,9 @@ def main():
             while True:
                 try:
                     msg = input("")
-                    self.conn.send(("* [{}]: ".format(self.name) + msg).encode())
+                    self.conn.send(("{} <{}>: ".format(self.now(), self.name) + msg).encode())
                 except KeyboardInterrupt:
-                    self.conn.send(("\n! {} left.".format(self.name)).encode())
+                    self.conn.send(("\n! {} left".format(self.name)).encode())
                     self.kill()
                     sock.close()
                     break
@@ -71,6 +75,10 @@ def main():
         def kill(self):
             self.running = False
 
+        def now(self):
+            dt = datetime.datetime.now()
+            return dt.strftime("%H:%M:%S")
+
         def run(self):
             self.host = input("Host:")
             self.port = int(sys.argv[1])
@@ -79,7 +87,7 @@ def main():
             # CONNECT
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock.connect((self.host, self.port))
-            self.sock.send(("* Connected to {}".format(self.name)).encode())
+            self.sock.send(("! Connected to {}\n".format(self.name)).encode())
 
             self.thread = threading.Thread(target=self.read_sock, args=())
             self.thread.start()
@@ -88,10 +96,10 @@ def main():
             while True:
                 try:
                     msg = input("")
-                    self.sock.send(("[{}]: ".format(self.name) + msg).encode())
+                    self.sock.send(("{} <{}>: ".format(self.now(), self.name) + msg).encode())
                 except KeyboardInterrupt:
                     self.kill()
-                    self.sock.send(("\n* {} left".format(self.name)).encode())
+                    self.sock.send(("\n! {} left".format(self.name)).encode())
                     self.sock.close()
                     break
 
