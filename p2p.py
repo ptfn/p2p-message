@@ -2,6 +2,7 @@ import socket
 import sys
 import threading
 import datetime
+import random
 
 def main():
     # ----SERVER----
@@ -14,6 +15,7 @@ def main():
             self.conn = None
             self.addr = None
             self.name = None
+            self.color = random.randint(30, 37)
 
         def read_conn(self):
             while self.running == True:
@@ -32,6 +34,7 @@ def main():
             self.host = "0.0.0.0"
             self.port = int(sys.argv[1])
             self.name = input("Name:")
+            print("--------------------")
 
             # CONNECT
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -47,8 +50,9 @@ def main():
             while True:
                 try:
                     msg = input("")
-                    self.conn.send(("{} <{}>: ".format(self.now(), self.name) + msg).encode())
+                    self.conn.send(("{} <\033[{}m{}\033[0m> : ".format(self.now(),self.color, self.name) + msg).encode())
                 except KeyboardInterrupt:
+                    print("\n--------------------")
                     self.conn.send(("\n! {} left".format(self.name)).encode())
                     self.kill()
                     sock.close()
@@ -65,6 +69,7 @@ def main():
             self.port = None
             self.sock = None
             self.name = None
+            self.color = random.randint(30, 37)
 
         def read_sock(self):
             while self.running == True:
@@ -83,6 +88,7 @@ def main():
             self.host = input("Host:")
             self.port = int(sys.argv[1])
             self.name = input("Name:")
+            print("--------------------")
 
             # CONNECT
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -96,8 +102,9 @@ def main():
             while True:
                 try:
                     msg = input("")
-                    self.sock.send(("{} <{}>: ".format(self.now(), self.name) + msg).encode())
+                    self.sock.send(("{} <\033[{}m{}\033[0m> : ".format(self.now(),self.color, self.name) + msg).encode())
                 except KeyboardInterrupt:
+                    print("\n--------------------")
                     self.kill()
                     self.sock.send(("\n! {} left".format(self.name)).encode())
                     self.sock.close()
@@ -106,10 +113,10 @@ def main():
 
     choice = input("Server/Connect:")
 
-    if choice == "server" or choice == "Server":
+    if choice == "server" or choice == "Server" or choice == "s":
         server = Server()
         server.run()
-    elif choice == "connect" or choice == "Connect":
+    elif choice == "connect" or choice == "Connect" or choice == "c":
         client = Client()
         client.run()
     else:
@@ -117,3 +124,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+class P2P:
+    def __init__(self, port, max_client=1):
+        pass
