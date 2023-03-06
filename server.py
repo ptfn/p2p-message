@@ -2,7 +2,7 @@ import socket
 
 clients = []
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-sock.bind(('192.168.0.160', 55555))
+sock.bind(('', 55555))
 print('--- Start Server ---')
 
 while True:
