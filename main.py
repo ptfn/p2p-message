@@ -1,58 +1,57 @@
 from colorama import Fore, init, Back
 from datetime import datetime
 from threading import Thread
+from crypto import RSA, aes
 from random import choice
 import argparse
 import socket
 import time
 import sys
-import rsa
 
 
 class P2P():
     def __init__(self, _name: str, _port: int, _first: bool,
-                 _max_clients: int, _port_peer: int, _length_keys: int):
+                 _max_clients: int, _port_peer: int,
+                 _length_rsa: int, _length_aes: int):
+        # Init library crypto for encrypt and decrypt message
+        self.rsa = RSA()
+        self.aes = aes()
+
         # Initial data for server and client startup
-        self.length_key = _length_keys  # It`s slow, but have high secure
         self.name = _name
         self.port = _port
         self.first = _first
         self.num_client = 0
+        self.length_rsa = _length_rsa  # It`s slow, but have high secure
+        self.length_aes = _length_aes
         self.max_clients = _max_clients
+
         # Structures for storing clients and servers
         self.clients_colors = list()
+        # TEST delete clients
         self.clients_ip = dict()
-        self.servers_ip = set()
-        self.address_server = ('192.168.0.160', _port_peer)
-        self.clients_sock = [socket.socket(socket.AF_INET, socket.SOCK_DGRAM) for i in range(self.max_clients)]
+        self.servers_ip = dict()
+        self.address_server = ('localhost', _port_peer)
+        self.clients_sock = [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                             for i in range(self.max_clients)]
         self.colors = [Fore.BLUE, Fore.CYAN, Fore.GREEN,
                        Fore.LIGHTBLACK_EX, Fore.LIGHTBLUE_EX,
                        Fore.LIGHTCYAN_EX, Fore.LIGHTGREEN_EX,
                        Fore.LIGHTMAGENTA_EX, Fore.LIGHTRED_EX,
                        Fore.LIGHTYELLOW_EX, Fore.MAGENTA,
                        Fore.RED, Fore.YELLOW]
+
+        # CRYPTOGRAPHY
         # RSA
-        print(f"[*] Generate RSA-{self.length_key} keys...")
-        self.generate_keys()
+        print(f"[*] Generate RSA-{self.length_rsa} keys...")
+        self.rsa.generate_keys(self.length_rsa)
         print("[*] Generated completed!")
-        self.private_key, self.public_key = self.load_keys()
+        self.private_key, self.public_key = self.rsa.load_keys()
 
-    # RSA - we need a separate class for this!!!
-    # Generate keys RSA
-    def generate_keys(self):
-        (public_key, private_key) = rsa.newkeys(self.length_key)
-        with open('pub.pem', 'wb') as p:
-            p.write(public_key.save_pkcs1('PEM'))
-        with open('sec.pem', 'wb') as p:
-            p.write(private_key.save_pkcs1('PEM'))
-
-    # Load keys RSA
-    def load_keys(self):
-        with open('pub.pem', 'rb') as p:
-            public_key = rsa.PublicKey.load_pkcs1(p.read())
-        with open('sec.pem', 'rb') as p:
-            private_key = rsa.PrivateKey.load_pkcs1(p.read())
-        return private_key, public_key
+        # AES
+        print(f"[*] Generate AES-{self.length_aes*8} key...")
+        self.aes_key = self.aes.create_key(self.length_aes)
+        print("[*] Generated completed!")
 
     # NETWORK
     # Function to start in the server and client threads
@@ -73,26 +72,26 @@ class P2P():
         try:
             client_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             client_sock.connect(self.address_server)
-            client_sock.sendto(f"G {self.port}".encode(), self.address_server)
+            client_sock.sendto(f"G {self.port}".encode(),
+                               self.address_server)
 
             while True:
-                data = client_sock.recv(4096).decode()
+                data = client_sock.recv(1024).decode()
 
                 if data.strip() == 'Not address':
                     break
 
                 else:
-                    address = data.split(',')[0][2:]
-                    port = data.split(',')[1]
-                    # Need add client?
+                    string = data.split(' ')
+                    ip = string[0]
+                    port = int(string[1])
                     self.connect_client(self.clients_sock[self.num_client],
-                                        int(port[:len(port)-1]),
-                                        address[:len(address)-1])
+                                        port, ip)
                     self.num_client += 1
 
             client_sock.close()
         except ConnectionRefusedError:
-            print("[*] Connect refused!")
+            print("[!] Connect refused!")
 
     # Primary server for receiving, connecting and transferring new clients
     def server(self):
@@ -100,47 +99,52 @@ class P2P():
         self.server_sock.bind(('', self.port))
 
         status = f"│Host: {socket.gethostname()} Port: {self.port}│"
-        len_line = round((len(status)-16)/2)
-        the_end = len_line if len(status) % 2 == 0 else len_line-1
+        length = round((len(status)-16)/2)
+        the_end = length if len(status) % 2 == 0 else length-1
 
-        start = f"┌{'─' * (len_line)} Start Server {'─' * (the_end)}┐\n" \
+        start = f"┌{'─' * (length)} Start Server {'─' * (the_end)}┐\n" \
                 f"{status}\n" \
                 f"└{'─' * (len(status)-2)}┘"
 
         print(start)
 
         while True:
-            data, address = self.server_sock.recvfrom(4096)
-            # print(data)
-
-            if not data:
-                break
-
+            data, address = self.server_sock.recvfrom(1024)
             string = data.decode().split(' ')
             port = int(string[1])
 
             if (address[0], port) not in self.servers_ip:
                 # Transferring peers to the client
                 if string[0] == "G":
-                    self.server_sock.sendto((f"{(self.address_server[0], self.port)}").encode(), address)
+                    to_send = f"{self.address_server[0]} {self.port}"
+                    self.server_sock.sendto(to_send.encode(), address)
 
                     if self.num_client > 0:
                         for server in self.servers_ip:
-                            self.server_sock.sendto((f"{server}").encode(),
-                                                    address)
+                            to_send = f"{server[0]} {server[1]}".encode()
+                            self.server_sock.sendto(to_send, address)
                     self.server_sock.sendto(b'Not address', address)
+
                 # Connecting server
                 else:
                     if self.num_client <= self.max_clients-1:
-                        # Convert string to public_key
-                        str_pub_key = ' '.join(string[2:]).encode()
-                        public_key = rsa.PublicKey.load_pkcs1(str_pub_key)
+                        server_key = self.public_key.save_pkcs1('PEM').decode()
+                        self.server_sock.sendto((f"{server_key}").encode(),
+                                                address)
+                        data = self.server_sock.recv(1024)
+                        key = self.rsa.decrypt(data, self.private_key)
 
-                        self.clients_ip[address] = public_key
-                        self.servers_ip.add((address[0], port))
-                        self.connect_client(self.clients_sock[self.num_client],
-                                            int(port),
-                                            address[0])
+                        self.clients_ip[address] = key
+                        self.servers_ip[(address[0], port)] = key
+                        sock = self.clients_sock[self.num_client]
+
+                        thread = Thread(target=self.connect_client,
+                                        args=[sock, int(port), address[0]])
+                        thread.daemon = True
+                        thread.start()
+                        # self.connect_client(self.clients_sock[self.num_client],
+                        #                     int(port),
+                        #                     address[0])
                         self.num_client += 1
                         print('\r[*] Added {} {}'.format(address[0], port))
 
@@ -148,9 +152,14 @@ class P2P():
     def connect_client(self, sock, port, address):
         try:
             server = address, port
-            string_public_key = self.public_key.save_pkcs1('PEM').decode()
             sock.connect(server)
-            sock.sendto(f"C {self.port} {string_public_key}".encode(), server)
+            print(f"\r[*] Connections to {server[0]} {server[1]}")
+            sock.sendto((f"C {self.port}").encode(), server)
+
+            data = sock.recv(1024).decode()
+            public_key = self.rsa.convert(data, '')
+            crypto = self.rsa.encrypt(self.aes_key, public_key)
+            sock.sendto(crypto, server)
 
             color = choice(self.colors)
             self.clients_colors.append(color)
@@ -160,29 +169,30 @@ class P2P():
             thread.daemon = True
             thread.start()
 
-        except Exception:
-            print('\r[*] Connect To {} Failed!'.format(server))
+        except Exception as e:
+            print('\r[!] Connect To {} Failed!'.format(server), e)
 
     # Listening function, receives data and displays
     def listen(self, sock):
         while True:
             try:
-                crypto, address = sock.recvfrom(4096)
-                decrypt = rsa.decrypt(crypto, self.private_key)
-                data = decrypt.decode()
+                cipher, address = sock.recvfrom(1024)
+                nonce, address = sock.recvfrom(1024)
 
-                if not data:
+                text = self.aes.decrypt(self.aes_key, cipher, nonce)
+                text = text.decode()
+
+                if not cipher and not nonce:
                     break
 
-                print('\r{}\n[{}]: '.format(data, self.name), end='')
+                print('\r{}\n[{}]: '.format(text, self.name), end='')
 
-                # Problem
-                if data.split(' ')[2] == 'came':
-                    self.servers_ip.discard(address)
+                if text.split(' ')[2] == 'came':
+                    del self.servers_ip[address]
                     break
 
             except Exception as e:
-                print("Error in the listening segment!", e)
+                print("[!] Error in the listening segment!", e)
 
         sock.close()
 
@@ -196,20 +206,25 @@ class P2P():
                 date_now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
                 if message != '/exit':
-                    for i, (addr, pub_key) in enumerate(self.clients_ip.items()):
-                        to_send = f"{self.clients_colors[i]}[{date_now}] {self.name}: {Fore.RESET}{message}"
-                        crypto = rsa.encrypt(to_send.encode(), pub_key)
-                        self.server_sock.sendto(crypto, addr)
+                    for i, (addr, key) in enumerate(self.clients_ip.items()):
+                        to_send = f"{self.clients_colors[i]}[{date_now}] " \
+                                  f"{self.name}: {Fore.RESET}{message}"
+                        cipher, nonce = self.aes.encrypt(key, to_send.encode())
+
+                        self.server_sock.sendto(cipher, addr)
+                        self.server_sock.sendto(nonce, addr)
 
                 else:
-                    for i, (addr, pub_key) in enumerate(self.clients_ip.items()):
+                    for i, (addr, key) in enumerate(self.clients_ip.items()):
                         to_send = f"[*] {self.name} came out!"
-                        crypto = rsa.encrypt(to_send.encode(), pub_key)
-                        self.server_sock.sendto(crypto, addr)
+                        cipher, nonce = self.aes.encrypt(key, to_send.encode())
+
+                        self.server_sock.sendto(cipher, addr)
+                        self.server_sock.sendto(nonce, addr)
                     # It work. Wow!
                     sys.exit()
             except Exception as e:
-                print("Error in the sending segment!", e)
+                print("[!] Error in the sending segment!", e)
 
 
 def main():
@@ -241,11 +256,17 @@ def main():
                         dest="max",
                         help="max client")
 
-    parser.add_argument("-l", "--length",
+    parser.add_argument("-lr", "--length_rsa",
                         type=int,
                         default=1024,
-                        dest="length",
-                        help="length keys")
+                        dest="length_rsa",
+                        help="length RSA keys")
+
+    parser.add_argument("-la", "--length_aes",
+                        type=int,
+                        default=16,
+                        dest="length_aes",
+                        help="length AES key")
 
     args = parser.parse_args()
 
@@ -254,7 +275,9 @@ def main():
               _port_peer=args.peer,
               _first=args.first,
               _max_clients=args.max,
-              _length_keys=args.length)
+              _length_rsa=args.length_rsa,
+              _length_aes=args.length_aes)
+
     p2p.run()
 
 
