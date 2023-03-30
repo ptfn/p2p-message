@@ -1,7 +1,7 @@
+from crypto import Asymmetrical, Symmetrical
 from colorama import Fore, init, Back
 from datetime import datetime
 from threading import Thread
-from crypto import RSA, aes
 from random import choice
 import argparse
 import socket
@@ -14,8 +14,8 @@ class P2P():
                  _max_clients: int, _port_peer: int,
                  _length_rsa: int, _length_aes: int):
         # Init library crypto for encrypt and decrypt message
-        self.rsa = RSA()
-        self.aes = aes()
+        self.rsa = Asymmetrical()
+        self.aes = Symmetrical()
 
         # Initial data for server and client startup
         self.name = _name
@@ -28,7 +28,7 @@ class P2P():
 
         # Structures for storing clients and servers
         self.clients_colors = list()
-        # TEST delete clients
+        self.clients_name = list()
         self.clients_ip = dict()
         self.servers_ip = dict()
         self.address_server = ('localhost', _port_peer)
@@ -53,7 +53,7 @@ class P2P():
         self.aes_key = self.aes.create_key(self.length_aes)
         print("[*] Generated completed!")
 
-    # NETWORK
+    # P2P NETWORK
     # Function to start in the server and client threads
     # and switch to data transfer
     def run(self):
@@ -113,6 +113,14 @@ class P2P():
             string = data.decode().split(' ')
             port = int(string[1])
 
+            try:
+                name = string[2]
+                if name not in self.clients_name:
+                    self.clients_name.append(name)
+                    self.list.addItem(name)
+            except Exception:
+                pass
+
             if (address[0], port) not in self.servers_ip:
                 # Transferring peers to the client
                 if string[0] == "G":
@@ -128,12 +136,14 @@ class P2P():
                 # Connecting server
                 else:
                     if self.num_client <= self.max_clients-1:
+                        # Key exchange
                         server_key = self.public_key.save_pkcs1('PEM').decode()
                         self.server_sock.sendto((f"{server_key}").encode(),
                                                 address)
                         data = self.server_sock.recv(1024)
                         key = self.rsa.decrypt(data, self.private_key)
 
+                        # Added client
                         self.clients_ip[address] = key
                         self.servers_ip[(address[0], port)] = key
                         sock = self.clients_sock[self.num_client]
@@ -142,9 +152,7 @@ class P2P():
                                         args=[sock, int(port), address[0]])
                         thread.daemon = True
                         thread.start()
-                        # self.connect_client(self.clients_sock[self.num_client],
-                        #                     int(port),
-                        #                     address[0])
+
                         self.num_client += 1
                         print('\r[*] Added {} {}'.format(address[0], port))
 
@@ -154,8 +162,9 @@ class P2P():
             server = address, port
             sock.connect(server)
             print(f"\r[*] Connections to {server[0]} {server[1]}")
-            sock.sendto((f"C {self.port}").encode(), server)
+            sock.sendto((f"C {self.port} {self.name}").encode(), server)
 
+            # Key exchange
             data = sock.recv(1024).decode()
             public_key = self.rsa.convert(data, '')
             crypto = self.rsa.encrypt(self.aes_key, public_key)
@@ -177,9 +186,10 @@ class P2P():
         while True:
             try:
                 cipher, address = sock.recvfrom(1024)
+                tag, address = sock.recvfrom(1024)
                 nonce, address = sock.recvfrom(1024)
 
-                text = self.aes.decrypt(self.aes_key, cipher, nonce)
+                text = self.aes.decrypt(self.aes_key, cipher, tag, nonce)
                 text = text.decode()
 
                 if not cipher and not nonce:
@@ -208,18 +218,22 @@ class P2P():
                 if message != '/exit':
                     for i, (addr, key) in enumerate(self.clients_ip.items()):
                         to_send = f"{self.clients_colors[i]}[{date_now}] " \
-                                  f"{self.name}: {Fore.RESET}{message}"
-                        cipher, nonce = self.aes.encrypt(key, to_send.encode())
+                                f"{self.name}: {Fore.RESET}{message}"
+                        cipher, tag, nonce = self.aes.encrypt(key,
+                                                            to_send.encode())
 
                         self.server_sock.sendto(cipher, addr)
+                        self.server_sock.sendto(tag, addr)
                         self.server_sock.sendto(nonce, addr)
 
                 else:
                     for i, (addr, key) in enumerate(self.clients_ip.items()):
                         to_send = f"[*] {self.name} came out!"
-                        cipher, nonce = self.aes.encrypt(key, to_send.encode())
+                        cipher, tag, nonce = self.aes.encrypt(key,
+                                                            to_send.encode())
 
                         self.server_sock.sendto(cipher, addr)
+                        self.server_sock.sendto(tag, addr)
                         self.server_sock.sendto(nonce, addr)
                     # It work. Wow!
                     sys.exit()

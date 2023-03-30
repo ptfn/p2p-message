@@ -3,7 +3,7 @@ from Crypto.Cipher import AES
 import rsa
 
 
-class RSA():
+class Asymmetrical():
     # Generate keys RSA
     def generate_keys(self, length_key):
         (public_key, private_key) = rsa.newkeys(length_key)
@@ -38,7 +38,7 @@ class RSA():
         return public_key
 
 
-class aes():
+class Symmetrical():
     # Generate AES key
     def create_key(self, size=16):
         key = get_random_bytes(size)
@@ -54,11 +54,11 @@ class aes():
     # Encrypt message
     def encrypt(self, key, message):
         cipher = AES.new(key, AES.MODE_EAX)
-        ciphertext = cipher.encrypt(message)
-        return ciphertext, cipher.nonce
+        ciphertext, tag = cipher.encrypt_and_digest(message)
+        return ciphertext, tag, cipher.nonce
 
     # Decrypt message
-    def decrypt(self, key, ciphertext, nonce):
+    def decrypt(self, key, ciphertext, tag, nonce):
         cipher = AES.new(key, AES.MODE_EAX, nonce)
-        message = cipher.decrypt(ciphertext)
+        message = cipher.decrypt_and_verify(ciphertext, tag)
         return message
